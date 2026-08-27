@@ -73,6 +73,14 @@ public class PassportReader : NSObject {
     // the previous OpenSSL CMS verification if necessary
     public var passiveAuthenticationUsesOpenSSL : Bool = false
 
+    /// Gancho para enviar APDUs propias sobre el canal seguro que estableció PACE.
+    ///
+    /// Añadido sobre la versión 2.3.3 de la librería. Se invoca al final, con todos
+    /// los grupos de datos ya leídos y verificados, de forma deliberada: si lo que
+    /// se envía rompe el canal o cambia la aplicación seleccionada, la lectura del
+    /// documento ya está hecha y no se pierde nada.
+    public var secureChannelProbe : ((TagReader) async -> Void)?
+
     public init( masterListURL: URL? = nil ) {
         super.init()
         
@@ -305,6 +313,10 @@ extension PassportReader {
         try await readDataGroups(tagReader: tagReader)
 
         try await doActiveAuthenticationIfNeccessary(tagReader : tagReader)
+
+        if let secureChannelProbe {
+            await secureChannelProbe( tagReader )
+        }
 
         self.updateReaderSessionMessage(alertMessage: NFCViewDisplayMessage.successfulRead)
         self.shouldNotReportNextReaderSessionInvalidationErrorUserCanceled = true

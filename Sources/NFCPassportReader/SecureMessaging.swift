@@ -193,7 +193,10 @@ public class SecureMessaging {
             Logger.secureMessaging.debug("\tCompute MAC with KSmac")
             var CCb = mac(algoName: algoName, key: self.ksmac, msg: K)
             if CCb.count > 8 {
-                CCb = [UInt8](CC[0..<8])
+                // Trunca el MAC calculado, no el recibido: usar CC aquí volvía la
+                // comparación de más abajo tautológica en cuanto el MAC pasaba de
+                // ocho bytes (AES). Con 3DES nunca se disparaba porque ya son ocho.
+                CCb = [UInt8](CCb[0..<8])
             }
             Logger.secureMessaging.debug("\t\tCC: \(binToHexRep(CCb))")
             

@@ -254,6 +254,98 @@ public class TagReader {
         return try await send( cmd: cmd )
     }
 
+    /// Respuesta sin interpretar, que distingue explícitamente un contenido en
+    /// claro de un sobre de secure messaging que no se pudo abrir. Sin esa
+    /// distinción, un fallo al desenvolver se confunde con datos legítimos.
+    public struct UncheckedResponse {
+        /// Contenido ya desenvuelto, o los bytes en crudo si no se pudo.
+        public let data: [UInt8]
+        public let sw1: UInt8
+        public let sw2: UInt8
+        /// La respuesta tal como llegó del chip, antes de desenvolverla.
+        public let raw: [UInt8]
+        /// Si la respuesta tenía forma de sobre de secure messaging.
+        ///
+        /// Importa para interpretar `sw1`/`sw2`: en una respuesta protegida el
+        /// estado exterior no significa nada —el de verdad va cifrado dentro—,
+        /// mientras que en una sin proteger es la respuesta real de la tarjeta.
+        public let wasProtected: Bool
+        /// Motivo del fallo al desenvolver, si lo hubo. Si no es nil, `data` es un
+        /// sobre cerrado y no debe interpretarse como contenido.
+        public let secureMessagingError: String?
+
+        public var isPlaintext: Bool { secureMessagingError == nil }
+    }
+
+    /// Envía una APDU por el canal seguro ya establecido y devuelve la respuesta
+    /// tal cual, sin convertir un estado distinto de 9000 en excepción.
+    ///
+    /// Añadido sobre la versión 2.3.3 de la librería. Hace falta porque `send`
+    /// lanza en cuanto el estado no es 9000, y eso descarta dos cosas que un
+    /// sondeo necesita: el 6982 de un fichero protegido, y —más importante— los
+    /// datos que acompañan a un 6282 al llegar al final de un fichero.
+    public func sendUnchecked( cmd: NFCISO7816APDU,
+                               useExtendedMode : Bool = false ) async throws -> UncheckedResponse {
+        var toSend = cmd
+        if let sm = secureMessaging {
+            toSend = try sm.protect( apdu: cmd, useExtendedMode: useExtendedMode )
+        }
+
+        var (data, sw1, sw2) = try await tag.sendCommand( apdu: toSend )
+
+        while sw1 == 0x61 {
+            let getResponse = NFCISO7816APDU(instructionClass: 0x0, instructionCode: 0xC0, p1Parameter: 0x0, p2Parameter: 0x0, data: Data(), expectedResponseLength: Int(sw2))
+            let nextSegment : Data
+            (nextSegment, sw1, sw2) = try await tag.sendCommand( apdu: getResponse )
+            data += nextSegment
+        }
+
+        let raw = [UInt8](data)
+
+        guard let sm = secureMessaging else {
+            return UncheckedResponse(data: raw, sw1: sw1, sw2: sw2, raw: raw,
+                                     wasProtected: false, secureMessagingError: nil)
+        }
+
+        // `unprotect` se rinde y devuelve el sobre cerrado si el estado exterior no
+        // es 9000. El DNIe repite ahí el 6282 de fin de fichero incluso cuando la
+        // lectura ha ido bien, así que se normaliza a 9000 para que el sobre se
+        // abra: el estado que cuenta viaja dentro, en el DO'99, y es el que
+        // devuelve `unprotect`.
+        //
+        // Se decide antes de llamar porque `unprotect` incrementa el SSC al entrar,
+        // y llamarlo dos veces descuadraría el contador.
+        let looksProtected = raw.first == 0x87 || raw.first == 0x99
+
+        guard looksProtected else {
+            return UncheckedResponse(data: raw,
+                                     sw1: sw1,
+                                     sw2: sw2,
+                                     raw: raw,
+                                     wasProtected: false,
+                                     secureMessagingError: "la tarjeta respondió sin proteger la respuesta")
+        }
+
+        do {
+            let unprotected = try sm.unprotect( rapdu: ResponseAPDU(data: raw, sw1: 0x90, sw2: 0x00) )
+            Logger.tagReader.debug( "\(String(format:"TagReader [sendUnchecked] \(binToHexRep(unprotected.data, asArray:true)), sw1:0x%02x sw2:0x%02x", unprotected.sw1, unprotected.sw2))" )
+            return UncheckedResponse(data: unprotected.data,
+                                     sw1: unprotected.sw1,
+                                     sw2: unprotected.sw2,
+                                     raw: raw,
+                                     wasProtected: true,
+                                     secureMessagingError: nil)
+        } catch {
+            Logger.tagReader.error( "TagReader [sendUnchecked] no se pudo desenvolver: \(error) · crudo: \(binToHexRep(raw))" )
+            return UncheckedResponse(data: raw,
+                                     sw1: sw1,
+                                     sw2: sw2,
+                                     raw: raw,
+                                     wasProtected: true,
+                                     secureMessagingError: "\(error)")
+        }
+    }
+
     func send( cmd: NFCISO7816APDU, useExtendedMode : Bool = false ) async throws -> ResponseAPDU {
         Logger.tagReader.debug( "TagReader - sending \(cmd)" )
         var toSend = cmd
