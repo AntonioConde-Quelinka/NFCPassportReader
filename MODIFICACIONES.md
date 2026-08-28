@@ -88,3 +88,16 @@ de uso real —una única instancia por sesión NFC, recorrida de forma
 estrictamente secuencial con `await`— ya cumple por construcción las
 garantías que pide `Sendable`; el `unchecked` solo reconoce que el
 compilador no puede demostrarlo sin anotación explícita.
+
+También `DataGroupId`, `NFCPassportReaderError` y `NFCViewDisplayMessage`
+(enums sin payload problemático) quedan `Sendable` en el mismo fichero:
+aparecen en `exportedDataGroups` y en la firma de `customDisplayMessage`.
+
+### `Sources/NFCPassportReader/PassportReader.swift`
+
+Los dos closures que ya cruzaban hacia la app —`secureChannelProbe` y el
+parámetro `customDisplayMessage` de `readPassport` (junto con el
+`private var nfcViewDisplayMessageHandler` donde se guarda)— se marcan
+`@Sendable`. Sin esa anotación, el compilador trata el propio *paso* del
+closure a través de `readPassport` como un cruce de aislamiento inseguro,
+independientemente de que los tipos que capture ya sean `Sendable`.

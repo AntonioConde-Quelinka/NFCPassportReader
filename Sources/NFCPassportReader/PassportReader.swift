@@ -65,7 +65,7 @@ public class PassportReader : NSObject {
     private var dataAmountToReadOverride : Int? = nil
     
     private var scanCompletedHandler: ((NFCPassportModel?, NFCPassportReaderError?)->())!
-    private var nfcViewDisplayMessageHandler: ((NFCViewDisplayMessage) -> String?)?
+    private var nfcViewDisplayMessageHandler: (@Sendable (NFCViewDisplayMessage) -> String?)?
     private var masterListURL : URL?
     private var shouldNotReportNextReaderSessionInvalidationErrorUserCanceled : Bool = false
 
@@ -79,7 +79,7 @@ public class PassportReader : NSObject {
     /// los grupos de datos ya leídos y verificados, de forma deliberada: si lo que
     /// se envía rompe el canal o cambia la aplicación seleccionada, la lectura del
     /// documento ya está hecha y no se pierde nada.
-    public var secureChannelProbe : ((TagReader) async -> Void)?
+    public var secureChannelProbe : (@Sendable (TagReader) async -> Void)?
 
     public init( masterListURL: URL? = nil ) {
         super.init()
@@ -99,7 +99,7 @@ public class PassportReader : NSObject {
         dataAmountToReadOverride = amount
     }
     
-    public func readPassport( mrzKey : String, tags : [DataGroupId] = [], aaChallenge: [UInt8]? = nil, skipSecureElements : Bool = true, skipCA : Bool = false, skipPACE : Bool = false, useExtendedMode : Bool = false, customDisplayMessage : ((NFCViewDisplayMessage) -> String?)? = nil) async throws -> NFCPassportModel {
+    public func readPassport( mrzKey : String, tags : [DataGroupId] = [], aaChallenge: [UInt8]? = nil, skipSecureElements : Bool = true, skipCA : Bool = false, skipPACE : Bool = false, useExtendedMode : Bool = false, customDisplayMessage : (@Sendable (NFCViewDisplayMessage) -> String?)? = nil) async throws -> NFCPassportModel {
         
         self.passport = NFCPassportModel()
         self.mrzKey = mrzKey
