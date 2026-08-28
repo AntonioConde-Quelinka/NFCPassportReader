@@ -25,3 +25,6 @@ extension ResponseAPDU: Sendable {}
 #endif
 
 extension NFCPassportModel: @unchecked Sendable {}
+extension DataGroupId: Sendable {}
+extension NFCPassportReaderError: Sendable {}
+extension NFCViewDisplayMessage: Sendable {}
