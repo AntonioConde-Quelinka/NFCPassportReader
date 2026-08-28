@@ -66,3 +66,25 @@ Si el MAC calculado pasa de ocho bytes, eso sustituye el calculado por el
 recibido y la comparación de más abajo (`CC == CCb`) se vuelve tautológica.
 Con 3DES el MAC son ocho bytes justos y no se disparaba; con AES sí. Se
 corrige truncando `CCb`, que es lo que tiene sentido comparar contra `CC`.
+
+## `Sendable` para consumo desde Swift 6
+
+### `Sources/NFCPassportReader/ConcurrencyBoundary.swift` (nuevo)
+
+La app consumidora (Swift-DNIe) migra a modo de lenguaje Swift 6 con
+comprobación estricta de concurrencia. `TagReader`, `PassportReader` y
+`NFCPassportModel` cruzan la frontera async hacia esa app (se pasan a
+funciones `async`, se devuelven desde `readPassport`, se capturan en el
+closure de `secureChannelProbe`) sin llevar ninguna anotación de
+concurrencia, así que el compilador los trata como no seguros de mover entre
+dominios de aislamiento.
+
+Se añaden conformidades `@unchecked Sendable` (y `Sendable` simple para
+`ResponseAPDU`/`TagReader.UncheckedResponse`, que son structs con solo
+campos ya `Sendable`) en un fichero nuevo, sin tocar las clases originales.
+Es deliberadamente una fachada mínima: no se audita el resto de la
+librería (parsers de grupos de datos, ASN.1, criptografía) porque el patrón
+de uso real —una única instancia por sesión NFC, recorrida de forma
+estrictamente secuencial con `await`— ya cumple por construcción las
+garantías que pide `Sendable`; el `unchecked` solo reconoce que el
+compilador no puede demostrarlo sin anotación explícita.
