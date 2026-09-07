@@ -277,6 +277,20 @@ public class TagReader {
         public var isPlaintext: Bool { secureMessagingError == nil }
     }
 
+    /// Instala (o retira, pasando nil) el secure messaging del canal.
+    ///
+    /// Añadido sobre la 2.3.3 para poder abrir un canal distinto de PACE/BAC
+    /// desde fuera del módulo — en concreto, CWA-14890 (autenticación mutua
+    /// con certificados de terminal), cuya orquestación de APDUs vive en
+    /// Swift-DNIe y no en este fork: `secureMessaging` es `internal` y sin
+    /// esto no hay forma de que el `SecureMessaging` que resulte de esa
+    /// orquestación llegue a `TagReader`. No cambia nada del comportamiento
+    /// existente: sin llamarlo, el canal sigue siendo el que instale PACE o
+    /// BAC como siempre.
+    public func installSecureMessaging(_ sm: SecureMessaging?) {
+        self.secureMessaging = sm
+    }
+
     /// Envía una APDU por el canal seguro ya establecido y devuelve la respuesta
     /// tal cual, sin convertir un estado distinto de 9000 en excepción.
     ///

@@ -101,3 +101,32 @@ parámetro `customDisplayMessage` de `readPassport` (junto con el
 `@Sendable`. Sin esa anotación, el compilador trata el propio *paso* del
 closure a través de `readPassport` como un cruce de aislamiento inseguro,
 independientemente de que los tipos que capture ya sean `Sendable`.
+
+## Instalar un secure messaging propio (canal CWA-14890)
+
+### `Sources/NFCPassportReader/TagReader.swift`
+
+Se añade `public func installSecureMessaging(_ sm: SecureMessaging?)`.
+
+Swift-DNIe necesita, además de PACE, abrir el canal de usuario CWA-14890 para
+poder autorizar `VERIFY`/`PSO: Compute Digital Signature` con la clave del
+ciudadano (ver `HALLAZGOS-DNIe.md` sección 4 y
+`Sources/DNIeSwift/ISO7816/CWA14890-FUENTES.md` en Swift-DNIe). La
+orquestación de ese protocolo (MSE:SET, PSO:VERIFY CERTIFICATE, GET
+CHALLENGE, INTERNAL/EXTERNAL AUTHENTICATE, derivación de claves de sesión)
+vive en Swift-DNIe, no en este fork — pero una vez derivadas las claves, el
+`SecureMessaging` resultante necesita instalarse en el `TagReader` para que
+`sendUnchecked` lo use, y `secureMessaging` es `internal`.
+
+No se expone un getter (no hace falta leer el objeto de vuelta) ni se hace
+`public` la propiedad directamente (más superficie de la necesaria para lo
+que se necesita). No se toca `SecureMessaging` en sí: su rama `.DES` ya
+implementa 3DES-CBC con relleno ISO 7816-4 y Retail-MAC de ocho octetos
+(`buildD08E`/`mac` en `Utils.swift`), que es exactamente lo que exige CWA-14890
+para un DNIe 3.0/4.0 (conector "V2" en la terminología de jmulticard, MAC de
+ocho octetos, frente al "V1" de DNIe 2.0 con MAC de cuatro) — el nombre del
+enum case `.DES` es heredado y engañoso (es 3DES, no DES simple), pero no se
+renombra: rompería la API pública del fork.
+
+Ningún cambio altera el comportamiento existente: sin llamarlo, el canal
+sigue siendo el que instale PACE o BAC como siempre.
