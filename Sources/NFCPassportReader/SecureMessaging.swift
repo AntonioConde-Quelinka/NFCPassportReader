@@ -237,7 +237,13 @@ public class SecureMessaging {
 
     func maskClassAndPad(apdu : NFCISO7816APDU ) -> [UInt8] {
         Logger.secureMessaging.debug("Mask class byte and pad command header")
-        let res = pad([0x0c, apdu.instructionCode, apdu.p1Parameter, apdu.p2Parameter], blockSize: padLength)
+        // ISO 7816-4 indica secure messaging fijando los bits 0x0C del CLA,
+        // no sustituyendo el byte entero: para los comandos ICAO estándar de
+        // esta librería (CLA 0x00) el resultado no cambia (0x00 | 0x0C =
+        // 0x0C), pero un CLA propietario (p. ej. 0x90 en comandos del DNIe)
+        // se perdía por completo, y la tarjeta rechazaba la APDU resultante.
+        let maskedClass = apdu.instructionClass | 0x0c
+        let res = pad([maskedClass, apdu.instructionCode, apdu.p1Parameter, apdu.p2Parameter], blockSize: padLength)
         Logger.secureMessaging.debug("\tCmdHeader: \(binToHexRep(res))")
         return res
     }

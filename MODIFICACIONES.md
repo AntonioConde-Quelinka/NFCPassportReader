@@ -130,3 +130,33 @@ renombra: rompería la API pública del fork.
 
 Ningún cambio altera el comportamiento existente: sin llamarlo, el canal
 sigue siendo el que instale PACE o BAC como siempre.
+
+## `maskClassAndPad` descartaba el CLA real de la APDU
+
+### `Sources/NFCPassportReader/SecureMessaging.swift`
+
+Al proteger una APDU, `maskClassAndPad` sustituía el byte de clase por un
+`0x0c` fijo:
+
+```swift
+let res = pad([0x0c, apdu.instructionCode, apdu.p1Parameter, apdu.p2Parameter], blockSize: padLength)
+```
+
+Para los comandos ICAO estándar de esta librería (siempre `CLA=0x00`) no se
+nota: `0x00 | 0x0C = 0x0C`. Pero CWA-14890 (ver la entrada anterior) necesita
+enviar bajo secure messaging un comando propietario del DNIe con `CLA=0x90`
+(`GetChipInfo`), y ese `0x90` se perdía por completo, sustituido por `0x0c` —
+la tarjeta veía `CLA=0x0C, INS=0xB8`, que no es una instrucción reconocible, y
+respondía `6D00`. Confirmado contra tarjeta física: enviar el mismo comando
+*sin* secure messaging tampoco vale (`6987`, "falta un objeto de secure
+messaging") — la tarjeta exige el canal activo para este paso, así que la
+única solución es que el CLA sobreviva dentro del sobre protegido.
+
+Se corrige indicando secure messaging con un OR sobre el CLA real
+(`apdu.instructionClass | 0x0c`), que es como lo describe ISO 7816-4, en
+lugar de sustituirlo. Para `CLA=0x00` el resultado no cambia; para `CLA=0x90`
+da `0x9C`. Sin confirmar todavía si `0x9C` es exactamente lo que el DNIe
+espera para este comando en concreto —jmulticard nunca lo necesita: en
+acceso por contacto lo envía sin ningún canal activo—, pero es la
+generalización razonable de la convención que esta misma librería ya usa
+para `CLA=0x00`.
